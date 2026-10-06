@@ -1,0 +1,1007 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Snack & Beer Duty Token 🍺🍿</title>
+    <meta name="description" content="The ultimate fair decision maker token for snacks and beer runs. Flip once a day to switch turns!">
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800;900&family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Canvas Confetti CDN -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    
+    <style>
+        :root {
+            --bg-dark: #0f111a;
+            --bg-card: rgba(26, 30, 46, 0.75);
+            --bg-card-border: rgba(255, 255, 255, 0.08);
+            
+            --p1-color: #ff5e7e;
+            --p1-gradient: linear-gradient(135deg, #ff5e7e 0%, #ff9966 100%);
+            --p1-glow: rgba(255, 94, 126, 0.4);
+            
+            --p2-color: #00d2ff;
+            --p2-gradient: linear-gradient(135deg, #00d2ff 0%, #3a7bd5 100%);
+            --p2-glow: rgba(0, 210, 255, 0.4);
+            
+            --gold-gradient: linear-gradient(135deg, #ffe066 0%, #f5af19 50%, #e65c00 100%);
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            
+            --radius-lg: 24px;
+            --radius-md: 16px;
+            --radius-sm: 8px;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        body {
+            font-family: 'Plus Jakarta Sans', sans-serif;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: space-between;
+            overflow-x: hidden;
+            background-image: 
+                radial-gradient(circle at 15% 20%, rgba(255, 94, 126, 0.12) 0%, transparent 40%),
+                radial-gradient(circle at 85% 80%, rgba(0, 210, 255, 0.12) 0%, transparent 40%);
+            padding: 20px;
+        }
+
+        /* App Header */
+        header {
+            width: 100%;
+            max-width: 500px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 12px 0;
+        }
+
+        .logo-title {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .logo-icon {
+            font-size: 28px;
+            animation: bounce 2s infinite ease-in-out;
+        }
+
+        @keyframes bounce {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-4px); }
+        }
+
+        h1 {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.4rem;
+            font-weight: 800;
+            background: linear-gradient(90deg, #fff, #9ca3af);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+
+        .header-actions {
+            display: flex;
+            gap: 10px;
+        }
+
+        .icon-btn {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--bg-card-border);
+            color: var(--text-main);
+            width: 42px;
+            height: 42px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            font-size: 18px;
+        }
+
+        .icon-btn:hover {
+            background: rgba(255, 255, 255, 0.12);
+            transform: scale(1.05);
+        }
+
+        .icon-btn:active {
+            transform: scale(0.95);
+        }
+
+        /* Main Container */
+        main {
+            width: 100%;
+            max-width: 460px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 28px;
+            margin: auto 0;
+        }
+
+        /* Status Badge */
+        .status-badge {
+            background: rgba(255, 255, 255, 0.06);
+            backdrop-filter: blur(12px);
+            border: 1px solid var(--bg-card-border);
+            padding: 8px 18px;
+            border-radius: 30px;
+            font-size: 0.88rem;
+            font-weight: 600;
+            color: var(--text-muted);
+            letter-spacing: 0.5px;
+            text-transform: uppercase;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.2);
+        }
+
+        .status-indicator {
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background-color: #10b981;
+            box-shadow: 0 0 10px #10b981;
+        }
+
+        /* 3D Coin Token Styles */
+        .token-perspective {
+            perspective: 1000px;
+            width: 260px;
+            height: 260px;
+            position: relative;
+            cursor: pointer;
+        }
+
+        .token-3d {
+            width: 100%;
+            height: 100%;
+            position: relative;
+            transform-style: preserve-3d;
+            transition: transform 0.8s cubic-bezier(0.34, 1.56, 0.64, 1);
+            border-radius: 50%;
+        }
+
+        .token-3d.flipping {
+            animation: spinFlip 1.2s cubic-bezier(0.4, 0.0, 0.2, 1);
+        }
+
+        @keyframes spinFlip {
+            0% { transform: rotateY(0deg) scale(1); }
+            50% { transform: rotateY(540deg) scale(1.18); }
+            100% { transform: rotateY(1080deg) scale(1); }
+        }
+
+        .token-face {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            backface-visibility: hidden;
+            border-radius: 50%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+            box-shadow: 
+                0 15px 35px rgba(0, 0, 0, 0.5),
+                inset 0 0 20px rgba(255, 255, 255, 0.25),
+                inset 0 0 40px rgba(0, 0, 0, 0.4);
+            border: 8px solid rgba(255, 255, 255, 0.15);
+            text-align: center;
+        }
+
+        /* Side 1 (Person 1) */
+        .token-face.front {
+            background: var(--p1-gradient);
+            box-shadow: 0 0 40px var(--p1-glow), inset 0 0 20px rgba(255,255,255,0.4);
+            transform: rotateY(0deg);
+        }
+
+        /* Side 2 (Person 2) */
+        .token-face.back {
+            background: var(--p2-gradient);
+            box-shadow: 0 0 40px var(--p2-glow), inset 0 0 20px rgba(255,255,255,0.4);
+            transform: rotateY(180deg);
+        }
+
+        .avatar-circle {
+            width: 80px;
+            height: 80px;
+            border-radius: 50%;
+            background: rgba(255, 255, 255, 0.2);
+            backdrop-filter: blur(8px);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 40px;
+            margin-bottom: 12px;
+            border: 3px solid rgba(255, 255, 255, 0.4);
+            box-shadow: 0 4px 15px rgba(0,0,0,0.15);
+        }
+
+        .person-name {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.8rem;
+            font-weight: 800;
+            color: #ffffff;
+            text-shadow: 0 2px 8px rgba(0,0,0,0.3);
+            line-height: 1.1;
+            margin-bottom: 4px;
+        }
+
+        .duty-label {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: rgba(255, 255, 255, 0.9);
+            background: rgba(0, 0, 0, 0.2);
+            padding: 4px 12px;
+            border-radius: 12px;
+            margin-top: 6px;
+        }
+
+        /* Flip Action Button */
+        .flip-btn-container {
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .btn-primary {
+            width: 100%;
+            max-width: 320px;
+            padding: 16px 24px;
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.15rem;
+            font-weight: 700;
+            border-radius: 16px;
+            border: none;
+            cursor: pointer;
+            color: #000;
+            background: var(--gold-gradient);
+            box-shadow: 
+                0 8px 25px rgba(245, 175, 25, 0.4),
+                inset 0 1px 0 rgba(255, 255, 255, 0.6);
+            transition: all 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+        }
+
+        .btn-primary:hover:not(:disabled) {
+            transform: translateY(-3px) scale(1.02);
+            box-shadow: 0 12px 30px rgba(245, 175, 25, 0.5);
+        }
+
+        .btn-primary:active:not(:disabled) {
+            transform: translateY(1px) scale(0.98);
+        }
+
+        .btn-primary:disabled {
+            background: linear-gradient(135deg, #374151 0%, #1f2937 100%);
+            color: #6b7280;
+            box-shadow: none;
+            cursor: not-allowed;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        /* Cooldown Timer display */
+        .cooldown-info {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .cooldown-time {
+            color: #f59e0b;
+            font-weight: 700;
+            font-family: monospace;
+            font-size: 0.95rem;
+        }
+
+        /* Stats Card */
+        .stats-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            width: 100%;
+        }
+
+        .stat-card {
+            background: var(--bg-card);
+            border: 1px solid var(--bg-card-border);
+            border-radius: var(--radius-md);
+            padding: 14px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 4px;
+            backdrop-filter: blur(10px);
+        }
+
+        .stat-value {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.3rem;
+            font-weight: 700;
+            color: #fff;
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+
+        /* Modals & Drawers */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(0, 0, 0, 0.75);
+            backdrop-filter: blur(8px);
+            z-index: 100;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.3s ease;
+            padding: 20px;
+        }
+
+        .modal-overlay.active {
+            opacity: 1;
+            pointer-events: auto;
+        }
+
+        .modal-card {
+            background: #161b26;
+            border: 1px solid var(--bg-card-border);
+            width: 100%;
+            max-width: 420px;
+            border-radius: var(--radius-lg);
+            padding: 24px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+            transform: translateY(20px);
+            transition: transform 0.3s ease;
+            max-height: 85vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .modal-overlay.active .modal-card {
+            transform: translateY(0);
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 12px;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+
+        .modal-title {
+            font-family: 'Outfit', sans-serif;
+            font-size: 1.25rem;
+            font-weight: 700;
+        }
+
+        .close-btn {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 24px;
+            cursor: pointer;
+        }
+
+        .close-btn:hover {
+            color: #fff;
+        }
+
+        .form-group {
+            margin-bottom: 16px;
+        }
+
+        .form-label {
+            display: block;
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            margin-bottom: 6px;
+            font-weight: 500;
+        }
+
+        .form-input {
+            width: 100%;
+            padding: 12px 14px;
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--bg-card-border);
+            border-radius: 10px;
+            color: #fff;
+            font-family: inherit;
+            font-size: 0.95rem;
+            outline: none;
+            transition: border 0.2s ease;
+        }
+
+        .form-input:focus {
+            border-color: #00d2ff;
+        }
+
+        .form-select {
+            width: 100%;
+            padding: 12px 14px;
+            background: #1f2430;
+            border: 1px solid var(--bg-card-border);
+            border-radius: 10px;
+            color: #fff;
+            font-family: inherit;
+            font-size: 0.95rem;
+            outline: none;
+        }
+
+        /* History List */
+        .history-list {
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            padding-right: 4px;
+        }
+
+        .history-item {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            padding: 12px 14px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+        }
+
+        .history-info {
+            display: flex;
+            flex-direction: column;
+            gap: 2px;
+        }
+
+        .history-action {
+            font-size: 0.9rem;
+            font-weight: 600;
+            color: #fff;
+        }
+
+        .history-time {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .history-tag {
+            font-size: 0.75rem;
+            font-weight: 700;
+            padding: 4px 8px;
+            border-radius: 6px;
+            background: rgba(255, 255, 255, 0.1);
+        }
+
+        .empty-history {
+            text-align: center;
+            color: var(--text-muted);
+            padding: 30px 0;
+            font-size: 0.9rem;
+        }
+
+        /* Footer */
+        footer {
+            font-size: 0.8rem;
+            color: var(--text-muted);
+            margin-top: 20px;
+            text-align: center;
+            opacity: 0.7;
+        }
+
+        footer a {
+            color: var(--text-muted);
+            text-decoration: underline;
+        }
+
+        /* Emergency Override Button */
+        .override-link {
+            background: none;
+            border: none;
+            color: #6b7280;
+            font-size: 0.75rem;
+            cursor: pointer;
+            text-decoration: underline;
+            margin-top: 4px;
+            transition: color 0.2s ease;
+        }
+
+        .override-link:hover {
+            color: #ef4444;
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Header -->
+    <header>
+        <div class="logo-title">
+            <span class="logo-icon">🍺</span>
+            <h1>Snack & Beer Token</h1>
+        </div>
+        <div class="header-actions">
+            <button class="icon-btn" id="history-btn" title="View History" aria-label="History">📜</button>
+            <button class="icon-btn" id="settings-btn" title="Settings" aria-label="Settings">⚙️</button>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main>
+        <!-- Status Indicator Badge -->
+        <div class="status-badge">
+            <div class="status-indicator"></div>
+            <span id="turn-status-text">Token Active • Ready</span>
+        </div>
+
+        <!-- 3D Flippable Coin Token -->
+        <div class="token-perspective" id="token-card" title="Click to flip token!">
+            <div class="token-3d" id="token-3d">
+                <!-- Front Side: Person 1 -->
+                <div class="token-face front" id="face-p1">
+                    <div class="avatar-circle" id="p1-avatar">🍿</div>
+                    <div class="person-name" id="p1-name">Person 1</div>
+                    <div class="duty-label">IT'S YOUR TURN!</div>
+                </div>
+
+                <!-- Back Side: Person 2 -->
+                <div class="token-face back" id="face-p2">
+                    <div class="avatar-circle" id="p2-avatar">🍺</div>
+                    <div class="person-name" id="p2-name">Person 2</div>
+                    <div class="duty-label">IT'S YOUR TURN!</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Action Button -->
+        <div class="flip-btn-container">
+            <button class="btn-primary" id="flip-btn">
+                <span>FLIP TOKEN</span>
+                <span style="font-size: 1.2rem;">🪙</span>
+            </button>
+            <div class="cooldown-info" id="cooldown-info">
+                <span>Next flip unlocks in:</span>
+                <span class="cooldown-time" id="countdown">00h 00m 00s</span>
+            </div>
+            <button class="override-link" id="override-btn">Emergency Override / Pass Turn</button>
+        </div>
+
+        <!-- Summary Stats Grid -->
+        <div class="stats-grid">
+            <div class="stat-card">
+                <span class="stat-value" id="stat-current-holder">-</span>
+                <span class="stat-label">Current Snack Master</span>
+            </div>
+            <div class="stat-card">
+                <span class="stat-value" id="stat-total-flips">0</span>
+                <span class="stat-label">Total Flips</span>
+            </div>
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer>
+        <p>Fair turns guaranteed • Anti-cheat lock active 🔒</p>
+    </footer>
+
+    <!-- Modal: Settings -->
+    <div class="modal-overlay" id="settings-modal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2 class="modal-title">Token Settings ⚙️</h2>
+                <button class="close-btn" class="close-modal" id="close-settings">&times;</button>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Person 1 Name & Emoji</label>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" class="form-input" id="input-p1-name" placeholder="e.g. Alex" value="Alex">
+                    <input type="text" class="form-input" id="input-p1-avatar" style="width: 70px; text-align: center;" value="🍿">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Person 2 Name & Emoji</label>
+                <div style="display: flex; gap: 8px;">
+                    <input type="text" class="form-input" id="input-p2-name" placeholder="e.g. Sarah" value="Sarah">
+                    <input type="text" class="form-input" id="input-p2-avatar" style="width: 70px; text-align: center;" value="🍺">
+                </div>
+            </div>
+            <div class="form-group">
+                <label class="form-label">Cooldown Mode</label>
+                <select class="form-select" id="input-cooldown-mode">
+                    <option value="calendar">Once per Calendar Day (Midnight Reset)</option>
+                    <option value="24h">24-Hour Timer Cooldown</option>
+                    <option value="test">Testing Mode (No Cooldown)</option>
+                </select>
+            </div>
+            <button class="btn-primary" id="save-settings-btn" style="margin-top: 10px;">Save Changes</button>
+        </div>
+    </div>
+
+    <!-- Modal: History Drawer -->
+    <div class="modal-overlay" id="history-modal">
+        <div class="modal-card">
+            <div class="modal-header">
+                <h2 class="modal-title">Flip History 📜</h2>
+                <button class="close-btn" id="close-history">&times;</button>
+            </div>
+            <div class="history-list" id="history-list">
+                <!-- Dynamic Items -->
+            </div>
+            <button class="override-link" id="clear-history-btn" style="margin-top: 15px; text-align: center;">Clear History Log</button>
+        </div>
+    </div>
+
+    <!-- Application Script -->
+    <script>
+        // State Management & LocalStorage Initialization
+        const STORAGE_KEY = 'snack_beer_token_state_v1';
+
+        const defaultState = {
+            p1: { name: 'Alex', avatar: '🍿' },
+            p2: { name: 'Sarah', avatar: '🍺' },
+            currentTurn: 1, // 1 for Person 1, 2 for Person 2
+            lastFlippedTime: null, // Timestamp ms
+            cooldownMode: 'calendar', // 'calendar', '24h', or 'test'
+            history: [] // Array of { timestamp, fromName, toName, type }
+        };
+
+        let state = loadState();
+
+        function loadState() {
+            try {
+                const saved = localStorage.getItem(STORAGE_KEY);
+                if (saved) {
+                    return { ...defaultState, ...JSON.parse(saved) };
+                }
+            } catch (e) {
+                console.error("Failed to load state", e);
+            }
+            return { ...defaultState };
+        }
+
+        function saveState() {
+            try {
+                localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+            } catch (e) {
+                console.error("Failed to save state", e);
+            }
+        }
+
+        // Web Audio API Sound Synthesizer
+        function playFlipSound() {
+            try {
+                const ctx = new (window.AudioContext || window.webkitAudioContext)();
+                
+                // Spin whistle / swoosh
+                const osc = ctx.createOscillator();
+                const gain = ctx.createGain();
+                
+                osc.type = 'sine';
+                osc.frequency.setValueAtTime(300, ctx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(800, ctx.currentTime + 0.3);
+                osc.frequency.exponentialRampToValueAtTime(200, ctx.currentTime + 0.8);
+                
+                gain.gain.setValueAtTime(0.15, ctx.currentTime);
+                gain.gain.linearRampToValueAtTime(0.3, ctx.currentTime + 0.3);
+                gain.gain.exponentialRampToValueAtTime(0.01, ctx.currentTime + 0.8);
+                
+                osc.connect(gain);
+                gain.connect(ctx.destination);
+                
+                osc.start();
+                osc.stop(ctx.currentTime + 0.8);
+
+                // Landing metallic coin chime
+                setTimeout(() => {
+                    const chimeOsc = ctx.createOscillator();
+                    const chimeGain = ctx.createGain();
+                    
+                    chimeOsc.type = 'triangle';
+                    chimeOsc.frequency.setValueAtTime(1200, ctx.currentTime);
+                    chimeOsc.frequency.exponentialRampToValueAtTime(2400, ctx.currentTime + 0.05);
+                    chimeOsc.frequency.exponentialRampToValueAtTime(600, ctx.currentTime + 0.4);
+                    
+                    chimeGain.gain.setValueAtTime(0.4, ctx.currentTime);
+                    chimeGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.5);
+                    
+                    chimeOsc.connect(chimeGain);
+                    chimeGain.connect(ctx.destination);
+                    
+                    chimeOsc.start();
+                    chimeOsc.stop(ctx.currentTime + 0.5);
+                }, 750);
+            } catch(e) {
+                // Audio Context might be blocked until user gesture, safe fallback
+            }
+        }
+
+        // DOM Elements
+        const token3d = document.getElementById('token-3d');
+        const tokenCard = document.getElementById('token-card');
+        const flipBtn = document.getElementById('flip-btn');
+        const cooldownInfo = document.getElementById('cooldown-info');
+        const countdownEl = document.getElementById('countdown');
+        const turnStatusText = document.getElementById('turn-status-text');
+        const overrideBtn = document.getElementById('override-btn');
+
+        const p1NameEl = document.getElementById('p1-name');
+        const p1AvatarEl = document.getElementById('p1-avatar');
+        const p2NameEl = document.getElementById('p2-name');
+        const p2AvatarEl = document.getElementById('p2-avatar');
+
+        const statCurrentHolder = document.getElementById('stat-current-holder');
+        const statTotalFlips = document.getElementById('stat-total-flips');
+
+        // Modal Elements
+        const settingsBtn = document.getElementById('settings-btn');
+        const settingsModal = document.getElementById('settings-modal');
+        const closeSettingsBtn = document.getElementById('close-settings');
+        const saveSettingsBtn = document.getElementById('save-settings-btn');
+        const inputP1Name = document.getElementById('input-p1-name');
+        const inputP1Avatar = document.getElementById('input-p1-avatar');
+        const inputP2Name = document.getElementById('input-p2-name');
+        const inputP2Avatar = document.getElementById('input-p2-avatar');
+        const inputCooldownMode = document.getElementById('input-cooldown-mode');
+
+        const historyBtn = document.getElementById('history-btn');
+        const historyModal = document.getElementById('history-modal');
+        const closeHistoryBtn = document.getElementById('close-history');
+        const historyList = document.getElementById('history-list');
+        const clearHistoryBtn = document.getElementById('clear-history-btn');
+
+        // UI Update Functions
+        function render() {
+            p1NameEl.textContent = state.p1.name;
+            p1AvatarEl.textContent = state.p1.avatar || '🍿';
+            p2NameEl.textContent = state.p2.name;
+            p2AvatarEl.textContent = state.p2.avatar || '🍺';
+
+            // Set token orientation
+            if (state.currentTurn === 1) {
+                token3d.style.transform = 'rotateY(0deg)';
+                statCurrentHolder.textContent = `${state.p1.avatar} ${state.p1.name}`;
+            } else {
+                token3d.style.transform = 'rotateY(180deg)';
+                statCurrentHolder.textContent = `${state.p2.avatar} ${state.p2.name}`;
+            }
+
+            statTotalFlips.textContent = state.history.length;
+
+            updateCooldownStatus();
+        }
+
+        function isCooldownActive() {
+            if (state.cooldownMode === 'test') return false;
+            if (!state.lastFlippedTime) return false;
+
+            const now = new Date();
+            const last = new Date(state.lastFlippedTime);
+
+            if (state.cooldownMode === 'calendar') {
+                // Check if last flip occurred today (same calendar date)
+                return now.getFullYear() === last.getFullYear() &&
+                       now.getMonth() === last.getMonth() &&
+                       now.getDate() === last.getDate();
+            } else if (state.cooldownMode === '24h') {
+                // 24 hours (86400000 ms)
+                return (now.getTime() - last.getTime()) < (24 * 60 * 60 * 1000);
+            }
+            return false;
+        }
+
+        function getNextAvailableTime() {
+            if (!state.lastFlippedTime) return new Date();
+            const last = new Date(state.lastFlippedTime);
+
+            if (state.cooldownMode === 'calendar') {
+                // Next midnight
+                const nextMidnight = new Date(last);
+                nextMidnight.setDate(nextMidnight.getDate() + 1);
+                nextMidnight.setHours(0, 0, 0, 0);
+                return nextMidnight;
+            } else if (state.cooldownMode === '24h') {
+                return new Date(last.getTime() + (24 * 60 * 60 * 1000));
+            }
+            return new Date();
+        }
+
+        function updateCooldownStatus() {
+            const locked = isCooldownActive();
+
+            if (locked) {
+                flipBtn.disabled = true;
+                flipBtn.querySelector('span').textContent = 'FLIP LOCKED TODAY';
+                cooldownInfo.style.display = 'flex';
+                turnStatusText.textContent = 'Token Locked • Flipped Today';
+
+                const targetTime = getNextAvailableTime();
+                const now = new Date();
+                const diffMs = Math.max(0, targetTime - now);
+
+                const hours = Math.floor(diffMs / (1000 * 60 * 60)).toString().padStart(2, '0');
+                const minutes = Math.floor((diffMs % (1000 * 60 * 60)) / (1000 * 60)).toString().padStart(2, '0');
+                const seconds = Math.floor((diffMs % (1000 * 60)) / 1000).toString().padStart(2, '0');
+
+                countdownEl.textContent = `${hours}h ${minutes}m ${seconds}s`;
+            } else {
+                flipBtn.disabled = false;
+                flipBtn.querySelector('span').textContent = 'FLIP TOKEN';
+                cooldownInfo.style.display = 'none';
+                turnStatusText.textContent = 'Token Active • Ready';
+            }
+        }
+
+        // Perform Token Flip
+        function executeFlip(isOverride = false) {
+            if (!isOverride && isCooldownActive()) return;
+
+            const fromPerson = state.currentTurn === 1 ? state.p1.name : state.p2.name;
+            const toPerson = state.currentTurn === 1 ? state.p2.name : state.p1.name;
+
+            // Trigger Animation
+            token3d.classList.add('flipping');
+            playFlipSound();
+
+            setTimeout(() => {
+                state.currentTurn = state.currentTurn === 1 ? 2 : 1;
+                state.lastFlippedTime = Date.now();
+                
+                // Add entry to history
+                state.history.unshift({
+                    timestamp: Date.now(),
+                    from: fromPerson,
+                    to: toPerson,
+                    type: isOverride ? 'override' : 'flip'
+                });
+
+                saveState();
+                render();
+
+                // Trigger celebration confetti
+                if (typeof confetti === 'function') {
+                    confetti({
+                        particleCount: 80,
+                        spread: 70,
+                        origin: { y: 0.6 }
+                    });
+                }
+            }, 600); // half-way through rotation
+
+            setTimeout(() => {
+                token3d.classList.remove('flipping');
+            }, 1200);
+        }
+
+        // Render History Items
+        function renderHistory() {
+            historyList.innerHTML = '';
+            if (state.history.length === 0) {
+                historyList.innerHTML = '<div class="empty-history">No token flips recorded yet.</div>';
+                return;
+            }
+
+            state.history.forEach(item => {
+                const dateObj = new Date(item.timestamp);
+                const formattedDate = dateObj.toLocaleDateString(undefined, { 
+                    month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
+                });
+
+                const historyItem = document.createElement('div');
+                historyItem.className = 'history-item';
+                historyItem.innerHTML = `
+                    <div class="history-info">
+                        <div class="history-action">Turn passed to <strong>${item.to}</strong></div>
+                        <div class="history-time">${formattedDate}</div>
+                    </div>
+                    <span class="history-tag" style="${item.type === 'override' ? 'background: rgba(239, 68, 68, 0.2); color: #f87171;' : 'color: #34d399;'}">
+                        ${item.type === 'override' ? 'OVERRIDE' : 'FLIPPED'}
+                    </span>
+                `;
+                historyList.appendChild(historyItem);
+            });
+        }
+
+        // Event Listeners
+        flipBtn.addEventListener('click', () => executeFlip(false));
+        tokenCard.addEventListener('click', () => {
+            if (!flipBtn.disabled) executeFlip(false);
+        });
+
+        overrideBtn.addEventListener('click', () => {
+            if (confirm("Execute Emergency Override? This will switch the token turn immediately even if locked.")) {
+                executeFlip(true);
+            }
+        });
+
+        // Settings Modal Handlers
+        settingsBtn.addEventListener('click', () => {
+            inputP1Name.value = state.p1.name;
+            inputP1Avatar.value = state.p1.avatar || '🍿';
+            inputP2Name.value = state.p2.name;
+            inputP2Avatar.value = state.p2.avatar || '🍺';
+            inputCooldownMode.value = state.cooldownMode || 'calendar';
+            settingsModal.classList.add('active');
+        });
+
+        closeSettingsBtn.addEventListener('click', () => settingsModal.classList.remove('active'));
+
+        saveSettingsBtn.addEventListener('click', () => {
+            state.p1.name = inputP1Name.value.trim() || 'Person 1';
+            state.p1.avatar = inputP1Avatar.value.trim() || '🍿';
+            state.p2.name = inputP2Name.value.trim() || 'Person 2';
+            state.p2.avatar = inputP2Avatar.value.trim() || '🍺';
+            state.cooldownMode = inputCooldownMode.value;
+
+            saveState();
+            render();
+            settingsModal.classList.remove('active');
+        });
+
+        // History Modal Handlers
+        historyBtn.addEventListener('click', () => {
+            renderHistory();
+            historyModal.classList.add('active');
+        });
+
+        closeHistoryBtn.addEventListener('click', () => historyModal.classList.remove('active'));
+
+        clearHistoryBtn.addEventListener('click', () => {
+            if (confirm("Are you sure you want to clear all flip history logs?")) {
+                state.history = [];
+                saveState();
+                renderHistory();
+                render();
+            }
+        });
+
+        // Close modal on click outside
+        [settingsModal, historyModal].forEach(modal => {
+            modal.addEventListener('click', (e) => {
+                if (e.target === modal) modal.classList.remove('active');
+            });
+        });
+
+        // Initial Render & Timer Interval
+        render();
+        setInterval(updateCooldownStatus, 1000);
+    </script>
+</body>
+</html>
