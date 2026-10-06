@@ -830,11 +830,17 @@
                             const localVer = state.version || 0;
                             const remoteTime = remoteState.lastFlippedTime || 0;
                             const localTime = state.lastFlippedTime || 0;
+                            const remoteHistoryLen = remoteState.history ? remoteState.history.length : 0;
+                            const localHistoryLen = (state.history || []).length;
 
-                            const isStrictlyNewer = remoteVer > localVer || remoteTime > localTime;
+                            const isStrictlyNewer = remoteVer > localVer || remoteTime > localTime || remoteHistoryLen !== localHistoryLen;
 
                             if (isStrictlyNewer) {
-                                state = { ...state, ...remoteState };
+                                state = { 
+                                    ...state, 
+                                    ...remoteState,
+                                    history: remoteState.history || []
+                                };
                                 currentRotationDeg = (state.currentTurn === 1) ? 0 : 180;
                                 saveState(true);
                                 render();
@@ -995,7 +1001,10 @@
                 statCurrentHolder.textContent = `${state.p2.avatar} ${state.p2.name}`;
             }
 
-            statTotalFlips.textContent = state.history.length;
+            statTotalFlips.textContent = (state.history || []).length;
+            if (historyModal && historyModal.classList.contains('active')) {
+                renderHistory();
+            }
             updateCooldownStatus();
             updateCloudBadge();
         }
@@ -1083,6 +1092,7 @@
                 state.lastFlippedTime = Date.now();
                 state.version = (state.version || 0) + 1;
                 
+                if (!state.history) state.history = [];
                 state.history.unshift({
                     timestamp: Date.now(),
                     from: fromPerson,
@@ -1109,12 +1119,13 @@
         // Render History Items
         function renderHistory() {
             historyList.innerHTML = '';
-            if (state.history.length === 0) {
+            const list = state.history || [];
+            if (list.length === 0) {
                 historyList.innerHTML = '<div class="empty-history">No token flips recorded yet.</div>';
                 return;
             }
 
-            state.history.forEach(item => {
+            list.forEach(item => {
                 const dateObj = new Date(item.timestamp);
                 const formattedDate = dateObj.toLocaleDateString(undefined, { 
                     month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' 
@@ -1158,6 +1169,7 @@
         unlockTimerBtn.addEventListener('click', () => {
             emergencyModal.classList.remove('active');
             state.lastFlippedTime = null;
+            state.version = (state.version || 0) + 1;
             saveState();
             render();
             showToast("🔓 Timer unlocked! You can now flip normally.");
@@ -1185,6 +1197,7 @@
             state.cooldownMode = inputCooldownMode.value;
             if (inputFirebaseUrl) state.firebaseUrl = inputFirebaseUrl.value.trim();
             if (inputSyncId) state.syncId = inputSyncId.value.trim() || 'snack_token_room';
+            state.version = (state.version || 0) + 1;
 
             saveState();
             render();
@@ -1197,6 +1210,7 @@
             syncNowBtn.addEventListener('click', () => {
                 if (inputFirebaseUrl) state.firebaseUrl = inputFirebaseUrl.value.trim();
                 if (inputSyncId) state.syncId = inputSyncId.value.trim() || 'snack_token_room';
+                state.version = (state.version || 0) + 1;
                 saveState();
                 initFirebaseSync();
                 showToast("Synced with Firebase 🔥");
@@ -1213,6 +1227,7 @@
 
         clearHistoryBtn.addEventListener('click', () => {
             state.history = [];
+            state.version = (state.version || 0) + 1;
             saveState();
             renderHistory();
             render();
