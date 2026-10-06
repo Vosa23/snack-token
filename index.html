@@ -748,6 +748,7 @@
             lastFlippedTime: null, // Timestamp ms
             cooldownMode: 'calendar', // 'calendar', '24h', or 'test'
             syncId: '', // Optional Cloud Sync Key
+            version: 1, // State version counter
             history: [] // Array of { timestamp, fromName, toName, type }
         };
 
@@ -794,7 +795,7 @@
                 });
 
                 if (response.ok) {
-                    if (cloudBadge) cloudBadge.textContent = 'Cloud Sync: Active 🟢';
+                    if (cloudBadge) cloudBadge.textContent = 'Cloud Sync: Connected 🟢';
                 } else {
                     if (cloudBadge) cloudBadge.textContent = 'Cloud Sync: Error 🔴';
                 }
@@ -816,13 +817,18 @@
                             const item = JSON.parse(lines[i]);
                             if (item.event === 'message' && item.message) {
                                 const remoteState = JSON.parse(item.message);
-                                const isNewerFlip = remoteState.lastFlippedTime && (!state.lastFlippedTime || remoteState.lastFlippedTime > state.lastFlippedTime);
-                                const isNewerHistory = remoteState.history && remoteState.history.length > state.history.length;
+                                const remoteVer = remoteState.version || 0;
+                                const localVer = state.version || 0;
 
-                                if (isNewerFlip || isNewerHistory) {
+                                const isNewer = remoteVer > localVer ||
+                                    remoteState.currentTurn !== state.currentTurn ||
+                                    (remoteState.lastFlippedTime && remoteState.lastFlippedTime !== state.lastFlippedTime) ||
+                                    (remoteState.history && remoteState.history.length !== state.history.length);
+
+                                if (isNewer) {
                                     state = { ...state, ...remoteState };
                                     currentRotationDeg = (state.currentTurn === 1) ? 0 : 180;
-                                    saveState(true);
+                                    saveState(true); // Save locally without re-pushing
                                     render();
                                 }
                                 break;
@@ -928,6 +934,18 @@
             }, 3000);
         }
 
+        function updateCloudBadge() {
+            const cloudBadge = document.getElementById('cloud-status-badge');
+            if (!cloudBadge) return;
+            if (state.syncId && state.syncId.trim()) {
+                cloudBadge.textContent = 'Cloud Sync: Connected 🟢';
+                cloudBadge.style.color = '#10b981';
+            } else {
+                cloudBadge.textContent = 'Cloud Sync: Disabled (Enter Secret Word)';
+                cloudBadge.style.color = '#9ca3af';
+            }
+        }
+
         // Render UI State
         function render() {
             p1NameEl.textContent = state.p1.name;
@@ -946,6 +964,7 @@
 
             statTotalFlips.textContent = state.history.length;
             updateCooldownStatus();
+            updateCloudBadge();
         }
 
         function isCooldownActive() {
@@ -1029,6 +1048,7 @@
             setTimeout(() => {
                 state.currentTurn = state.currentTurn === 1 ? 2 : 1;
                 state.lastFlippedTime = Date.now();
+                state.version = (state.version || 0) + 1;
                 
                 state.history.unshift({
                     timestamp: Date.now(),
@@ -1173,7 +1193,7 @@
         render();
         pullFromCloud();
         setInterval(updateCooldownStatus, 1000);
-        setInterval(pullFromCloud, 10000);
+        setInterval(pullFromCloud, 3000);
     </script>
 </body>
 </html>
