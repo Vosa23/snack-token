@@ -690,11 +690,8 @@
             </div>
             <div class="form-group" style="margin-top: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.08);">
                 <label class="form-label">Cloud Sync ☁️ (Share turn across devices)</label>
-                <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 8px;">Enter the same Sync Code on both phones to stay in real-time sync!</p>
-                <div style="display: flex; gap: 8px;">
-                    <input type="text" class="form-input" id="input-sync-id" placeholder="Enter or paste Sync Code" value="">
-                    <button class="btn-secondary" id="create-sync-btn" style="white-space: nowrap; font-size: 0.8rem;">Create Code ➕</button>
-                </div>
+                <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 8px;">Enter the same Secret Word on both phones to stay in real-time sync!</p>
+                <input type="text" class="form-input" id="input-sync-id" placeholder="e.g. alex-sarah-duty-2026" value="">
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 10px;">
                     <span id="cloud-status-badge" style="font-size: 0.8rem; color: var(--text-muted);">Cloud Sync: Disabled</span>
                     <button class="btn-secondary" id="sync-now-btn" style="padding: 6px 12px; font-size: 0.8rem;">Sync Now 🔄</button>
@@ -779,36 +776,7 @@
             if (!skipCloudPush) pushToCloud();
         }
 
-        // Cloud Realtime Sync Functions
-        const API_URL = 'https://api.restful-api.dev/objects';
-
-        async function createCloudRoom() {
-            const cloudBadge = document.getElementById('cloud-status-badge');
-            try {
-                if (cloudBadge) cloudBadge.textContent = 'Creating Code... ⏳';
-
-                const response = await fetch(API_URL, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: 'SnackToken', data: state })
-                });
-
-                if (response.ok) {
-                    const result = await response.json();
-                    state.syncId = result.id;
-                    saveState(true);
-                    const inputSyncId = document.getElementById('input-sync-id');
-                    if (inputSyncId) inputSyncId.value = state.syncId;
-                    if (cloudBadge) cloudBadge.textContent = 'Cloud Sync: Active 🟢';
-                    showToast("Sync Code generated! Enter it on other devices.");
-                } else {
-                    showToast("Failed to create Sync Code", true);
-                }
-            } catch(e) {
-                showToast("Failed to create Sync Code", true);
-            }
-        }
-
+        // Cloud Realtime Sync Functions (Powered by ntfy.sh open Pub/Sub)
         async function pushToCloud() {
             const cloudBadge = document.getElementById('cloud-status-badge');
             if (!state.syncId || !state.syncId.trim()) {
@@ -817,17 +785,16 @@
             }
             try {
                 if (cloudBadge) cloudBadge.textContent = 'Cloud Sync: Syncing... ⏳';
-                
-                const response = await fetch(`${API_URL}/${encodeURIComponent(state.syncId.trim())}`, {
-                    method: 'PUT',
+
+                const topic = 'snacktoken_' + state.syncId.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+                const response = await fetch(`https://ntfy.sh/${topic}`, {
+                    method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ name: 'SnackToken', data: state })
+                    body: JSON.stringify(state)
                 });
 
                 if (response.ok) {
                     if (cloudBadge) cloudBadge.textContent = 'Cloud Sync: Active 🟢';
-                } else if (response.status === 404) {
-                    await createCloudRoom();
                 } else {
                     if (cloudBadge) cloudBadge.textContent = 'Cloud Sync: Error 🔴';
                 }
@@ -839,20 +806,28 @@
         async function pullFromCloud() {
             if (!state.syncId || !state.syncId.trim()) return;
             try {
-                const response = await fetch(`${API_URL}/${encodeURIComponent(state.syncId.trim())}`);
+                const topic = 'snacktoken_' + state.syncId.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+                const response = await fetch(`https://ntfy.sh/${topic}/json?poll=1`);
                 if (response.ok) {
-                    const result = await response.json();
-                    if (result && result.data) {
-                        const remoteState = result.data;
-                        const isNewerFlip = remoteState.lastFlippedTime && (!state.lastFlippedTime || remoteState.lastFlippedTime > state.lastFlippedTime);
-                        const isNewerHistory = remoteState.history && remoteState.history.length > state.history.length;
-                        
-                        if (isNewerFlip || isNewerHistory) {
-                            state = { ...state, ...remoteState };
-                            currentRotationDeg = (state.currentTurn === 1) ? 0 : 180;
-                            saveState(true);
-                            render();
-                        }
+                    const text = await response.text();
+                    const lines = text.trim().split('\n');
+                    for (let i = lines.length - 1; i >= 0; i--) {
+                        try {
+                            const item = JSON.parse(lines[i]);
+                            if (item.event === 'message' && item.message) {
+                                const remoteState = JSON.parse(item.message);
+                                const isNewerFlip = remoteState.lastFlippedTime && (!state.lastFlippedTime || remoteState.lastFlippedTime > state.lastFlippedTime);
+                                const isNewerHistory = remoteState.history && remoteState.history.length > state.history.length;
+
+                                if (isNewerFlip || isNewerHistory) {
+                                    state = { ...state, ...remoteState };
+                                    currentRotationDeg = (state.currentTurn === 1) ? 0 : 180;
+                                    saveState(true);
+                                    render();
+                                }
+                                break;
+                            }
+                        } catch(e) {}
                     }
                 }
             } catch(e) {}
@@ -1168,13 +1143,6 @@
                 pushToCloud();
                 pullFromCloud();
                 showToast("Synced with Cloud ☁️");
-            });
-        }
-
-        const createSyncBtn = document.getElementById('create-sync-btn');
-        if (createSyncBtn) {
-            createSyncBtn.addEventListener('click', () => {
-                createCloudRoom();
             });
         }
 
