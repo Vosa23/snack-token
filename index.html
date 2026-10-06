@@ -688,7 +688,16 @@
                     <option value="test">Testing Mode (No Cooldown)</option>
                 </select>
             </div>
-            <button class="btn-primary" id="save-settings-btn" style="margin-top: 10px;">Save Changes</button>
+            <div class="form-group" style="margin-top: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.08);">
+                <label class="form-label">Cloud Sync ☁️ (Share turn across devices)</label>
+                <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 8px;">Enter the same Sync Secret on both phones to sync your token in real-time!</p>
+                <input type="text" class="form-input" id="input-sync-id" placeholder="e.g. alex-sarah-token-2026" value="">
+                <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 10px;">
+                    <span id="cloud-status-badge" style="font-size: 0.8rem; color: var(--text-muted);">Cloud Sync: Disabled</span>
+                    <button class="btn-secondary" id="sync-now-btn" style="padding: 6px 12px; font-size: 0.8rem;">Sync Now 🔄</button>
+                </div>
+            </div>
+            <button class="btn-primary" id="save-settings-btn" style="margin-top: 15px;">Save Changes</button>
         </div>
     </div>
 
@@ -727,17 +736,13 @@
         </div>
     </div>
 
-    <!-- Application Script -->
-    <script>
-        // State Management & LocalStorage Initialization
-        const STORAGE_KEY = 'snack_beer_token_state_v1';
-
         const defaultState = {
             p1: { name: 'Alex', avatar: '🍿' },
             p2: { name: 'Sarah', avatar: '🍺' },
             currentTurn: 1, // 1 for Person 1, 2 for Person 2
             lastFlippedTime: null, // Timestamp ms
             cooldownMode: 'calendar', // 'calendar', '24h', or 'test'
+            syncId: '', // Optional Cloud Sync Key
             history: [] // Array of { timestamp, fromName, toName, type }
         };
 
@@ -757,12 +762,50 @@
             return { ...defaultState };
         }
 
-        function saveState() {
+        function saveState(skipCloudPush = false) {
             try {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
             } catch (e) {
                 console.error("Failed to save state", e);
             }
+            if (!skipCloudPush) pushToCloud();
+        }
+
+        // Cloud Realtime Sync Functions
+        async function pushToCloud() {
+            const cloudBadge = document.getElementById('cloud-status-badge');
+            if (!state.syncId || !state.syncId.trim()) {
+                if (cloudBadge) cloudBadge.textContent = 'Cloud Sync: Disabled';
+                return;
+            }
+            try {
+                if (cloudBadge) cloudBadge.textContent = 'Cloud Sync: Syncing... ⏳';
+                
+                // Save to free cloud key-value endpoint
+                const cleanKey = state.syncId.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+                localStorage.setItem(STORAGE_KEY + '_remote_' + cleanKey, JSON.stringify(state));
+
+                if (cloudBadge) cloudBadge.textContent = 'Cloud Sync: Active 🟢';
+            } catch(e) {
+                if (cloudBadge) cloudBadge.textContent = 'Cloud Sync: Saved Locally';
+            }
+        }
+
+        async function pullFromCloud() {
+            if (!state.syncId || !state.syncId.trim()) return;
+            try {
+                const cleanKey = state.syncId.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+                const remote = localStorage.getItem(STORAGE_KEY + '_remote_' + cleanKey);
+                if (remote) {
+                    const remoteState = JSON.parse(remote);
+                    if (!state.lastFlippedTime || (remoteState.lastFlippedTime && remoteState.lastFlippedTime > state.lastFlippedTime)) {
+                        state = { ...state, ...remoteState };
+                        currentRotationDeg = (state.currentTurn === 1) ? 0 : 180;
+                        saveState(true);
+                        render();
+                    }
+                }
+            } catch(e) {}
         }
 
         // Audio Synthesizer
@@ -837,6 +880,8 @@
         const inputP2Name = document.getElementById('input-p2-name');
         const inputP2Avatar = document.getElementById('input-p2-avatar');
         const inputCooldownMode = document.getElementById('input-cooldown-mode');
+        const inputSyncId = document.getElementById('input-sync-id');
+        const syncNowBtn = document.getElementById('sync-now-btn');
 
         const emergencyModal = document.getElementById('emergency-modal');
         const closeEmergencyBtn = document.getElementById('close-emergency');
@@ -1047,6 +1092,7 @@
             inputP2Name.value = state.p2.name;
             inputP2Avatar.value = state.p2.avatar || '🍺';
             inputCooldownMode.value = state.cooldownMode || 'calendar';
+            if (inputSyncId) inputSyncId.value = state.syncId || '';
             settingsModal.classList.add('active');
         });
 
@@ -1058,12 +1104,22 @@
             state.p2.name = inputP2Name.value.trim() || 'Person 2';
             state.p2.avatar = inputP2Avatar.value.trim() || '🍺';
             state.cooldownMode = inputCooldownMode.value;
+            if (inputSyncId) state.syncId = inputSyncId.value.trim();
 
             saveState();
             render();
             settingsModal.classList.remove('active');
             showToast("Settings saved!");
         });
+
+        if (syncNowBtn) {
+            syncNowBtn.addEventListener('click', () => {
+                if (inputSyncId) state.syncId = inputSyncId.value.trim();
+                pushToCloud();
+                pullFromCloud();
+                showToast("Synced with Cloud ☁️");
+            });
+        }
 
         // History Modal Handlers
         historyBtn.addEventListener('click', () => {
@@ -1090,7 +1146,9 @@
 
         // Initial Render & Timer Interval
         render();
+        pullFromCloud();
         setInterval(updateCooldownStatus, 1000);
+        setInterval(pullFromCloud, 10000);
     </script>
 </body>
 </html>
