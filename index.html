@@ -777,31 +777,87 @@
             if (!skipCloudPush) pushToCloud();
         }
 
-        // Cloud Realtime Sync Functions (Powered by ntfy.sh open Pub/Sub)
-        async function pushToCloud() {
+        // Cloud Realtime Sync Functions (Powered by ntfy.sh SSE Realtime Stream)
+        let eventSource = null;
+
+        function initCloudSync() {
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+
             const cloudBadge = document.getElementById('cloud-status-badge');
             if (!state.syncId || !state.syncId.trim()) {
-                if (cloudBadge) cloudBadge.textContent = 'Cloud Sync: Disabled';
+                if (cloudBadge) {
+                    cloudBadge.textContent = 'Cloud Sync: Disabled (Enter Secret Word)';
+                    cloudBadge.style.color = '#9ca3af';
+                }
                 return;
             }
-            try {
-                if (cloudBadge) cloudBadge.textContent = 'Cloud Sync: Syncing... ⏳';
 
+            const topic = 'snacktoken_' + state.syncId.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
+
+            try {
+                if (cloudBadge) {
+                    cloudBadge.textContent = 'Cloud Sync: Connecting... ⏳';
+                    cloudBadge.style.color = '#f59e0b';
+                }
+
+                eventSource = new EventSource(`https://ntfy.sh/${topic}/sse`);
+
+                eventSource.onopen = () => {
+                    if (cloudBadge) {
+                        cloudBadge.textContent = 'Cloud Sync: Connected 🟢';
+                        cloudBadge.style.color = '#10b981';
+                    }
+                };
+
+                eventSource.onmessage = (event) => {
+                    try {
+                        const item = JSON.parse(event.data);
+                        if (item.event === 'message' && item.message) {
+                            const remoteState = JSON.parse(item.message);
+                            const remoteVer = remoteState.version || 0;
+                            const localVer = state.version || 0;
+                            const remoteTime = remoteState.lastFlippedTime || 0;
+                            const localTime = state.lastFlippedTime || 0;
+
+                            const isStrictlyNewer = remoteVer > localVer || remoteTime > localTime;
+
+                            if (isStrictlyNewer) {
+                                state = { ...state, ...remoteState };
+                                currentRotationDeg = (state.currentTurn === 1) ? 0 : 180;
+                                saveState(true); // Save locally without re-broadcasting
+                                render();
+                            }
+                        }
+                    } catch(e) {}
+                };
+
+                eventSource.onerror = () => {
+                    if (cloudBadge) {
+                        cloudBadge.textContent = 'Cloud Sync: Reconnecting... 🟡';
+                        cloudBadge.style.color = '#f59e0b';
+                    }
+                };
+            } catch(e) {
+                if (cloudBadge) {
+                    cloudBadge.textContent = 'Cloud Sync: Offline 🔴';
+                    cloudBadge.style.color = '#ef4444';
+                }
+            }
+        }
+
+        async function pushToCloud() {
+            if (!state.syncId || !state.syncId.trim()) return;
+            try {
                 const topic = 'snacktoken_' + state.syncId.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
-                const response = await fetch(`https://ntfy.sh/${topic}`, {
+                await fetch(`https://ntfy.sh/${topic}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(state)
                 });
-
-                if (response.ok) {
-                    if (cloudBadge) cloudBadge.textContent = 'Cloud Sync: Connected 🟢';
-                } else {
-                    if (cloudBadge) cloudBadge.textContent = 'Cloud Sync: Error 🔴';
-                }
-            } catch(e) {
-                if (cloudBadge) cloudBadge.textContent = 'Cloud Sync: Offline 🟡';
-            }
+            } catch(e) {}
         }
 
         async function pullFromCloud() {
@@ -819,16 +875,15 @@
                                 const remoteState = JSON.parse(item.message);
                                 const remoteVer = remoteState.version || 0;
                                 const localVer = state.version || 0;
+                                const remoteTime = remoteState.lastFlippedTime || 0;
+                                const localTime = state.lastFlippedTime || 0;
 
-                                const isNewer = remoteVer > localVer ||
-                                    remoteState.currentTurn !== state.currentTurn ||
-                                    (remoteState.lastFlippedTime && remoteState.lastFlippedTime !== state.lastFlippedTime) ||
-                                    (remoteState.history && remoteState.history.length !== state.history.length);
+                                const isStrictlyNewer = remoteVer > localVer || remoteTime > localTime;
 
-                                if (isNewer) {
+                                if (isStrictlyNewer) {
                                     state = { ...state, ...remoteState };
                                     currentRotationDeg = (state.currentTurn === 1) ? 0 : 180;
-                                    saveState(true); // Save locally without re-pushing
+                                    saveState(true);
                                     render();
                                 }
                                 break;
@@ -1153,6 +1208,7 @@
 
             saveState();
             render();
+            initCloudSync();
             settingsModal.classList.remove('active');
             showToast("Settings saved!");
         });
@@ -1160,7 +1216,8 @@
         if (syncNowBtn) {
             syncNowBtn.addEventListener('click', () => {
                 if (inputSyncId) state.syncId = inputSyncId.value.trim();
-                pushToCloud();
+                saveState();
+                initCloudSync();
                 pullFromCloud();
                 showToast("Synced with Cloud ☁️");
             });
@@ -1191,9 +1248,10 @@
 
         // Initial Render & Timer Interval
         render();
+        initCloudSync();
         pullFromCloud();
         setInterval(updateCooldownStatus, 1000);
-        setInterval(pullFromCloud, 3000);
+        setInterval(pullFromCloud, 30000);
     </script>
 </body>
 </html>
