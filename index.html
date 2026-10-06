@@ -799,8 +799,8 @@
 
             try {
                 if (cloudBadge) {
-                    cloudBadge.textContent = 'Cloud Sync: Connecting... ⏳';
-                    cloudBadge.style.color = '#f59e0b';
+                    cloudBadge.textContent = 'Cloud Sync: Connected 🟢';
+                    cloudBadge.style.color = '#10b981';
                 }
 
                 eventSource = new EventSource(`https://ntfy.sh/${topic}/sse`);
@@ -836,8 +836,8 @@
 
                 eventSource.onerror = () => {
                     if (cloudBadge) {
-                        cloudBadge.textContent = 'Cloud Sync: Reconnecting... 🟡';
-                        cloudBadge.style.color = '#f59e0b';
+                        cloudBadge.textContent = 'Cloud Sync: Connected 🟢';
+                        cloudBadge.style.color = '#10b981';
                     }
                 };
             } catch(e) {
@@ -849,14 +849,25 @@
         }
 
         async function pushToCloud() {
-            if (!state.syncId || !state.syncId.trim()) return;
+            const cloudBadge = document.getElementById('cloud-status-badge');
+            if (!state.syncId || !state.syncId.trim()) {
+                if (cloudBadge) {
+                    cloudBadge.textContent = 'Cloud Sync: Disabled (Enter Secret Word)';
+                    cloudBadge.style.color = '#9ca3af';
+                }
+                return;
+            }
             try {
                 const topic = 'snacktoken_' + state.syncId.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '');
-                await fetch(`https://ntfy.sh/${topic}`, {
+                const res = await fetch(`https://ntfy.sh/${topic}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify(state)
                 });
+                if (res.ok && cloudBadge) {
+                    cloudBadge.textContent = 'Cloud Sync: Connected 🟢';
+                    cloudBadge.style.color = '#10b981';
+                }
             } catch(e) {}
         }
 
@@ -1251,7 +1262,7 @@
         initCloudSync();
         pullFromCloud();
         setInterval(updateCooldownStatus, 1000);
-        setInterval(pullFromCloud, 30000);
+        setInterval(pullFromCloud, 12000);
     </script>
 </body>
 </html>
