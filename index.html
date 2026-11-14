@@ -13,10 +13,6 @@
     
     <!-- Canvas Confetti CDN -->
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
-
-    <!-- Google Firebase Realtime Database SDK -->
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
     
     <style>
         :root {
@@ -693,15 +689,14 @@
                 </select>
             </div>
             <div class="form-group" style="margin-top: 20px; padding-top: 15px; border-top: 1px solid rgba(255,255,255,0.08);">
-                <label class="form-label">Firebase Realtime DB URL 🔥 (Free Real-time Cloud)</label>
-                <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 8px;">Paste your free Google Firebase Database URL below to sync all devices instantly!</p>
-                <input type="text" class="form-input" id="input-firebase-url" placeholder="https://your-app-default-rtdb.firebaseio.com" value="">
+                <label class="form-label">RPi5 Local Server Sync 🍓</label>
+                <p style="font-size: 0.75rem; color: var(--text-muted); margin-bottom: 8px;">Devices on the same room code share state via your Raspberry Pi 5 server.</p>
                 
                 <label class="form-label" style="margin-top: 10px;">Pair Secret / Room Code</label>
                 <input type="text" class="form-input" id="input-sync-id" placeholder="e.g. alex-sarah-duty-2026" value="">
                 
                 <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 12px;">
-                    <span id="cloud-status-badge" style="font-size: 0.8rem; color: var(--text-muted);">Firebase Sync: Disabled</span>
+                    <span id="cloud-status-badge" style="font-size: 0.8rem; color: var(--text-muted);">Local Sync: Syncing... ⏳</span>
                     <button class="btn-secondary" id="sync-now-btn" style="padding: 6px 12px; font-size: 0.8rem;">Sync Now 🔄</button>
                 </div>
             </div>
@@ -755,12 +750,12 @@
             currentTurn: 1, // 1 for Person 1, 2 for Person 2
             lastFlippedTime: null, // Timestamp ms
             cooldownMode: 'calendar', // 'calendar', '24h', or 'test'
-            firebaseUrl: '', // Free Firebase Database URL
             syncId: 'snack_token_room', // Room Secret
             version: 1, // State version counter
-            history: [] // Array of { timestamp, fromName, toName, type }
+            history: [] // Array of { timestamp, from, to, type }
         };
 
+        let hasLocalState = false;
         let state = loadState();
         let currentRotationDeg = (state.currentTurn === 1) ? 0 : 180;
         let isAnimating = false;
@@ -769,6 +764,7 @@
             try {
                 const saved = localStorage.getItem(STORAGE_KEY);
                 if (saved) {
+                    hasLocalState = true;
                     return { ...defaultState, ...JSON.parse(saved) };
                 }
             } catch (e) {
@@ -777,105 +773,153 @@
             return { ...defaultState };
         }
 
-        function saveState(skipCloudPush = false) {
+        function saveState(skipServerPush = false) {
             try {
                 localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+                hasLocalState = true;
             } catch (e) {
                 console.error("Failed to save state", e);
             }
-            if (!skipCloudPush) pushToCloud();
+            if (!skipServerPush) pushToServer();
         }
 
-        // Firebase Realtime Database Functions
-        let firebaseApp = null;
-        let firebaseDb = null;
-        let roomRef = null;
+        // Local HTTP + JSON File Sync (WebSocket client commented out below for future reuse)
+        let syncStatus = 'connecting'; // 'connecting' | 'connected' | 'offline'
 
-        function initFirebaseSync() {
-            const cloudBadge = document.getElementById('cloud-status-badge');
-            const rawUrl = state.firebaseUrl ? state.firebaseUrl.trim() : '';
+        function getRoomKey() {
+            const cleaned = state.syncId ? state.syncId.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '') : '';
+            return cleaned || 'snack_token_room';
+        }
 
-            if (!rawUrl) {
-                if (cloudBadge) {
-                    cloudBadge.textContent = 'Firebase Sync: Disabled (Enter DB URL in Settings)';
-                    cloudBadge.style.color = '#9ca3af';
-                }
-                return;
+        function applyRemoteState(remoteState) {
+            if (!remoteState) return;
+            const remoteVer = remoteState.version || 0;
+            const localVer = state.version || 0;
+            const remoteTime = remoteState.lastFlippedTime || 0;
+            const localTime = state.lastFlippedTime || 0;
+            const remoteHistoryLen = remoteState.history ? remoteState.history.length : 0;
+            const localHistoryLen = (state.history || []).length;
+
+            const isStrictlyNewer = !hasLocalState || remoteVer > localVer || remoteTime > localTime || remoteHistoryLen !== localHistoryLen;
+
+            if (isStrictlyNewer) {
+                state = {
+                    ...state,
+                    ...remoteState,
+                    history: remoteState.history || []
+                };
+                currentRotationDeg = (state.currentTurn === 1) ? 0 : 180;
+                saveState(true);
+                render();
             }
+        }
+
+        async function initLocalSync() {
+            await pullFromServer();
+        }
+
+        async function pushToServer() {
+            const roomKey = getRoomKey();
+            try {
+                const res = await fetch(`/api/room/${encodeURIComponent(roomKey)}`, {
+                    method: 'PUT',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(state)
+                });
+                syncStatus = res.ok ? 'connected' : 'offline';
+            } catch (err) {
+                console.error('Server sync write error', err);
+                syncStatus = 'offline';
+            }
+            updateCloudBadge();
+        }
+
+        async function pullFromServer() {
+            const roomKey = getRoomKey();
+            syncStatus = 'connecting';
+            updateCloudBadge();
+            try {
+                const res = await fetch(`/api/room/${encodeURIComponent(roomKey)}`, { cache: 'no-store' });
+                if (!res.ok) throw new Error(`HTTP ${res.status}`);
+                const data = await res.json();
+                syncStatus = 'connected';
+                if (data.state) {
+                    applyRemoteState(data.state);
+                } else if (hasLocalState) {
+                    await pushToServer();
+                }
+            } catch (err) {
+                console.error('Server sync read error', err);
+                syncStatus = 'offline';
+            }
+            updateCloudBadge();
+        }
+
+        window.addEventListener('focus', () => pullFromServer());
+
+        /* WebSocket real-time sync (commented out for future reuse)
+        let syncSocket = null;
+        let reconnectTimer = null;
+
+        function initWebSocketSync() {
+            if (reconnectTimer) {
+                clearTimeout(reconnectTimer);
+                reconnectTimer = null;
+            }
+            if (syncSocket) {
+                syncSocket.onclose = null;
+                syncSocket.close();
+                syncSocket = null;
+            }
+
+            syncStatus = 'connecting';
+            updateCloudBadge();
+
+            const roomKey = getRoomKey();
+            const wsProtocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+            const wsUrl = `${wsProtocol}//${window.location.host}/ws?room=${encodeURIComponent(roomKey)}`;
 
             try {
-                if (cloudBadge) {
-                    cloudBadge.textContent = 'Firebase Sync: Connecting... ⏳';
-                    cloudBadge.style.color = '#f59e0b';
-                }
+                syncSocket = new WebSocket(wsUrl);
 
-                if (!firebaseApp && typeof firebase !== 'undefined') {
-                    firebaseApp = firebase.initializeApp({ databaseURL: rawUrl }, 'snackTokenApp');
-                    firebaseDb = firebase.database(firebaseApp);
-                } else if (typeof firebase === 'undefined') {
-                    if (cloudBadge) cloudBadge.textContent = 'Firebase SDK Loading...';
-                    return;
-                }
+                syncSocket.onopen = () => {
+                    syncStatus = 'connected';
+                    updateCloudBadge();
+                };
 
-                if (firebaseDb) {
-                    const roomKey = state.syncId ? state.syncId.trim().toLowerCase().replace(/[^a-z0-9_-]/g, '') : 'snack_token_room';
-                    
-                    if (roomRef) roomRef.off();
-                    roomRef = firebaseDb.ref('rooms/' + roomKey);
-
-                    roomRef.on('value', (snapshot) => {
-                        const remoteState = snapshot.val();
-                        if (remoteState) {
-                            const remoteVer = remoteState.version || 0;
-                            const localVer = state.version || 0;
-                            const remoteTime = remoteState.lastFlippedTime || 0;
-                            const localTime = state.lastFlippedTime || 0;
-                            const remoteHistoryLen = remoteState.history ? remoteState.history.length : 0;
-                            const localHistoryLen = (state.history || []).length;
-
-                            const isStrictlyNewer = remoteVer > localVer || remoteTime > localTime || remoteHistoryLen !== localHistoryLen;
-
-                            if (isStrictlyNewer) {
-                                state = { 
-                                    ...state, 
-                                    ...remoteState,
-                                    history: remoteState.history || []
-                                };
-                                currentRotationDeg = (state.currentTurn === 1) ? 0 : 180;
-                                saveState(true);
-                                render();
+                syncSocket.onmessage = (event) => {
+                    try {
+                        const msg = JSON.parse(event.data);
+                        if (msg.type === 'state') {
+                            if (msg.state) {
+                                applyRemoteState(msg.state);
+                            } else if (hasLocalState) {
+                                pushToServer();
                             }
                         }
-                        if (cloudBadge) {
-                            cloudBadge.textContent = 'Firebase Sync: Connected 🟢';
-                            cloudBadge.style.color = '#10b981';
-                        }
-                    }, (error) => {
-                        console.error("Firebase value error", error);
-                        if (cloudBadge) {
-                            cloudBadge.textContent = 'Firebase Sync: Access Denied / Check Rules 🔴';
-                            cloudBadge.style.color = '#ef4444';
-                        }
-                    });
-                }
-            } catch(e) {
-                console.error("Firebase init error", e);
-                if (cloudBadge) {
-                    cloudBadge.textContent = 'Firebase Sync: Invalid URL / Offline 🔴';
-                    cloudBadge.style.color = '#ef4444';
-                }
+                    } catch (e) {
+                        console.error('Failed to parse sync message', e);
+                    }
+                };
+
+                syncSocket.onerror = () => {
+                    syncStatus = 'offline';
+                    updateCloudBadge();
+                };
+
+                syncSocket.onclose = () => {
+                    syncStatus = 'offline';
+                    updateCloudBadge();
+                    reconnectTimer = setTimeout(initWebSocketSync, 3000);
+                };
+            } catch (e) {
+                console.error('WebSocket init error', e);
+                syncStatus = 'offline';
+                updateCloudBadge();
+                reconnectTimer = setTimeout(initWebSocketSync, 3000);
             }
         }
-
-        function pushToCloud() {
-            if (roomRef) {
-                roomRef.set(state).catch(err => console.error("Firebase write error", err));
-            }
-        }
-
-        function pullFromCloud() {
-            // Handled automatically via Firebase Realtime Database onValue stream!
-        }
+        */
 
         // Audio Synthesizer
         function playFlipSound() {
@@ -949,7 +993,6 @@
         const inputP2Name = document.getElementById('input-p2-name');
         const inputP2Avatar = document.getElementById('input-p2-avatar');
         const inputCooldownMode = document.getElementById('input-cooldown-mode');
-        const inputFirebaseUrl = document.getElementById('input-firebase-url');
         const inputSyncId = document.getElementById('input-sync-id');
         const syncNowBtn = document.getElementById('sync-now-btn');
 
@@ -976,12 +1019,15 @@
         function updateCloudBadge() {
             const cloudBadge = document.getElementById('cloud-status-badge');
             if (!cloudBadge) return;
-            if (state.syncId && state.syncId.trim()) {
-                cloudBadge.textContent = 'Cloud Sync: Connected 🟢';
+            if (syncStatus === 'connected') {
+                cloudBadge.textContent = `Local Sync: Ready 🟢 (${getRoomKey()})`;
                 cloudBadge.style.color = '#10b981';
+            } else if (syncStatus === 'connecting') {
+                cloudBadge.textContent = 'Local Sync: Syncing... ⏳';
+                cloudBadge.style.color = '#f59e0b';
             } else {
-                cloudBadge.textContent = 'Cloud Sync: Disabled (Enter Secret Word)';
-                cloudBadge.style.color = '#9ca3af';
+                cloudBadge.textContent = 'Local Sync: Offline 🔴';
+                cloudBadge.style.color = '#ef4444';
             }
         }
 
@@ -1182,7 +1228,6 @@
             inputP2Name.value = state.p2.name;
             inputP2Avatar.value = state.p2.avatar || '🍺';
             inputCooldownMode.value = state.cooldownMode || 'calendar';
-            if (inputFirebaseUrl) inputFirebaseUrl.value = state.firebaseUrl || '';
             if (inputSyncId) inputSyncId.value = state.syncId || 'snack_token_room';
             settingsModal.classList.add('active');
         });
@@ -1190,30 +1235,43 @@
         closeSettingsBtn.addEventListener('click', () => settingsModal.classList.remove('active'));
 
         saveSettingsBtn.addEventListener('click', () => {
+            const prevRoom = getRoomKey();
             state.p1.name = inputP1Name.value.trim() || 'Person 1';
             state.p1.avatar = inputP1Avatar.value.trim() || '🍿';
             state.p2.name = inputP2Name.value.trim() || 'Person 2';
             state.p2.avatar = inputP2Avatar.value.trim() || '🍺';
             state.cooldownMode = inputCooldownMode.value;
-            if (inputFirebaseUrl) state.firebaseUrl = inputFirebaseUrl.value.trim();
             if (inputSyncId) state.syncId = inputSyncId.value.trim() || 'snack_token_room';
-            state.version = (state.version || 0) + 1;
+            const nextRoom = getRoomKey();
+            const roomChanged = prevRoom !== nextRoom;
 
-            saveState();
-            render();
-            initFirebaseSync();
+            if (roomChanged) {
+                hasLocalState = false;
+                saveState(true);
+                render();
+                initLocalSync();
+            } else {
+                state.version = (state.version || 0) + 1;
+                saveState();
+                render();
+            }
             settingsModal.classList.remove('active');
             showToast("Settings saved!");
         });
 
         if (syncNowBtn) {
             syncNowBtn.addEventListener('click', () => {
-                if (inputFirebaseUrl) state.firebaseUrl = inputFirebaseUrl.value.trim();
+                const prevRoom = getRoomKey();
                 if (inputSyncId) state.syncId = inputSyncId.value.trim() || 'snack_token_room';
-                state.version = (state.version || 0) + 1;
-                saveState();
-                initFirebaseSync();
-                showToast("Synced with Firebase 🔥");
+                const roomChanged = prevRoom !== getRoomKey();
+                if (roomChanged) {
+                    hasLocalState = false;
+                    saveState(true);
+                    initLocalSync();
+                } else {
+                    pullFromServer();
+                }
+                showToast("Synced with RPi5 server 🔄");
             });
         }
 
@@ -1243,7 +1301,7 @@
 
         // Initial Render & Timer Interval
         render();
-        initFirebaseSync();
+        initLocalSync();
         setInterval(updateCooldownStatus, 1000);
     </script>
 </body>

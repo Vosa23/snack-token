@@ -1,0 +1,13 @@
+{
+  "name": "snack-token",
+  "version": "1.0.0",
+  "description": "Snack & Beer Duty Token with local WebSocket real-time sync and JSON persistence",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "ws": "^8.18.0"
+  }
+}

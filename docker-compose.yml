@@ -1,0 +1,15 @@
+services:
+  snack-token:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: snack-token
+    restart: unless-stopped
+    ports:
+      - "3002:3002"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - PORT=3002
+      - DATA_DIR=/app/data
+      - NODE_ENV=production
